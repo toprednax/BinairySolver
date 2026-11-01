@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f1e8">
+  <title>Binary & Sudoku Puzzle Solver</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Puzzle solver home">
+      <span class="brand-mark" aria-hidden="true"><i>0</i><i>1</i><i>1</i><i>0</i></span>
+      <span>Puzzle<br>Solver</span>
+    </a>
+    <button class="help-button" id="helpButton" type="button">How to play <span>?</span></button>
+  </header>
+
+  <main>
+    <section class="intro">
+      <p class="eyebrow">A tidy little puzzle tool</p>
+      <h1>Turn clues into<br><em>a complete grid.</em></h1>
+      <p class="lede">Enter the numbers from a binary or Sudoku puzzle, then let the solver complete the grid.</p>
+    </section>
+
+    <section class="workspace" aria-label="Puzzle workspace">
+      <aside class="panel controls-panel">
+        <div class="step-label"><span>1</span> Set up your board</div>
+        <label for="puzzleType">Puzzle type</label>
+        <div class="select-wrap">
+          <select id="puzzleType">
+            <option value="binary">Binary puzzle</option>
+            <option value="sudoku">Sudoku</option>
+          </select>
+        </div>
+        <label for="sizeSelect">Grid size</label>
+        <div class="select-wrap">
+          <select id="sizeSelect">
+            <option value="4">4 × 4</option>
+            <option value="6" selected>6 × 6</option>
+            <option value="8">8 × 8</option>
+            <option value="9" hidden>9 × 9</option>
+            <option value="10">10 × 10</option>
+            <option value="12">12 × 12</option>
+            <option value="14">14 × 14</option>
+            <option value="16">16 × 16</option>
+          </select>
+        </div>
+
+        <div class="photo-block">
+          <div class="or"><span>or use a photo</span></div>
+          <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+          <button class="photo-button" id="photoButton" type="button">
+            <span class="camera-icon" aria-hidden="true"></span>
+            <span><strong>Take or choose a photo</strong><small>Keep it beside the grid while entering clues</small></span>
+          </button>
+          <div class="photo-preview" id="photoPreview" hidden>
+            <img id="photoImage" alt="Your puzzle reference">
+            <button id="removePhoto" type="button" aria-label="Remove photo">×</button>
+          </div>
+        </div>
+
+          <div class="tip" id="inputTip"><span>Tip</span> Tap a square to cycle through <b>0</b>, <b>1</b>, and blank. On a keyboard, type 0 or 1 directly.</div>
+      </aside>
+
+      <section class="panel board-panel">
+        <div class="board-heading">
+          <div>
+            <div class="step-label"><span>2</span> Enter the clues</div>
+            <p id="boardDescription">6 × 6 puzzle · 0 clues entered</p>
+          </div>
+          <div class="board-tools">
+            <button class="text-button example-button" id="exampleButton" type="button">Try example</button>
+            <button class="text-button" id="clearButton" type="button">Clear board</button>
+          </div>
+        </div>
+
+        <div class="board-shell">
+          <div id="puzzleGrid" class="puzzle-grid" role="grid" aria-label="Binary puzzle grid"></div>
+        </div>
+        <p class="status" id="status" role="status" aria-live="polite">Board ready — enter the printed clues.</p>
+
+        <div class="actions">
+          <button class="solve-button" id="solveButton" type="button">Solve puzzle <span aria-hidden="true">→</span></button>
+          <button class="undo-button" id="undoButton" type="button" disabled>Show my clues</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="helpDialog">
+    <button class="dialog-close" id="closeHelp" aria-label="Close">×</button>
+    <p class="eyebrow" id="helpEyebrow">Binary puzzle rules</p>
+    <h2 id="helpTitle">Every row and column follows three rules.</h2>
+    <ol id="binaryRules">
+      <li>They contain the same number of zeroes and ones.</li>
+      <li>No more than two identical numbers can sit beside each other.</li>
+      <li>No two completed rows or columns may be identical.</li>
+    </ol>
+    <ol id="sudokuRules" hidden>
+      <li>Every row contains each number from 1 through 9 exactly once.</li>
+      <li>Every column contains each number from 1 through 9 exactly once.</li>
+      <li>Every outlined 3 × 3 box contains each number exactly once.</li>
+    </ol>
+  </dialog>
+
+  <footer>Built for quiet moments and stubborn puzzles.</footer>
+  <script src="app.js"></script>
+</body>
+</html>

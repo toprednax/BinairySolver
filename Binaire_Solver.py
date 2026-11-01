@@ -1,257 +1,172 @@
-"""
-Binaire rooster is een list in een list met zijde gelijk aan breedte
+"""Solver for binary (Takuzu) puzzles.
 
+Boards are square lists containing ``0``, ``1`` and ``""`` for empty cells.
 """
-import copy
-# import time
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Optional, Union
+
+
+EMPTY = ""
 
 
 class Binairy:
+    """Solve a binary puzzle in place.
 
-    def __init__(self, board):
+    The misspelled class name is retained for compatibility with the UI.
+    """
+
+    def __init__(self, board: list[list[Union[int, str]]]):
+        self._validate_shape(board)
         self.board = board
+        self.size = len(board)
+        self.half = self.size // 2
 
-    def is_valid(self, nummer, position):
-        # een nummer is 1 of 0 volgens de regels van het binaire spel
+    @staticmethod
+    def _validate_shape(board: Sequence[Sequence[Union[int, str]]]) -> None:
+        if not board or len(board) % 2:
+            raise ValueError("The board size must be a positive even number")
+        size = len(board)
+        if any(len(row) != size for row in board):
+            raise ValueError("The board must be square")
+        if any(cell not in (0, 1, EMPTY) for row in board for cell in row):
+            raise ValueError('Cells must contain 0, 1, or ""')
+
+    def _column(self, column: int) -> list[Union[int, str]]:
+        return [row[column] for row in self.board]
+
+    def _line_is_valid(self, line: Sequence[Union[int, str]]) -> bool:
+        if line.count(0) > self.half or line.count(1) > self.half:
+            return False
+        return all(
+            not (line[index] == line[index + 1] == line[index + 2] != EMPTY)
+            for index in range(self.size - 2)
+        )
+
+    def _complete_line_is_unique(self, line: Sequence[Union[int, str]], *, row: bool, index: int) -> bool:
+        if EMPTY in line:
+            return True
+        peers = self.board if row else [self._column(col) for col in range(self.size)]
+        return all(index == peer_index or list(line) != list(peer) for peer_index, peer in enumerate(peers))
+
+    def is_valid(self, number: int, position: tuple[int, int]) -> bool:
+        """Return whether placing *number* at *position* obeys all rules."""
+        if number not in (0, 1):
+            return False
         row, column = position
-
-        given_row = self.board[row]
-
-        whole_column = []
-        for i in range(len(self.board[0])):
-            whole_column += [self.board[i][column]]
-
-        if self.check(whole_column, row, nummer) and self.check(given_row, column, nummer):
-            return True
-        else:
+        if self.board[row][column] not in (EMPTY, number):
             return False
 
-    def check(self, array, column, nummer):
-        if array.count(nummer) == len(self.board) / 2:
+        previous = self.board[row][column]
+        self.board[row][column] = number
+        row_values = self.board[row]
+        column_values = self._column(column)
+        valid = (
+            self._line_is_valid(row_values)
+            and self._line_is_valid(column_values)
+            and self._complete_line_is_unique(row_values, row=True, index=row)
+            and self._complete_line_is_unique(column_values, row=False, index=column)
+        )
+        self.board[row][column] = previous
+        return valid
+
+    def check(self, array: Sequence[Union[int, str]], position: int, number: int) -> bool:
+        """Compatibility helper: validate a number in a standalone line."""
+        candidate = list(array)
+        candidate[position] = number
+        return self._line_is_valid(candidate)
+
+    def _board_is_valid(self) -> bool:
+        rows = self.board
+        columns = [self._column(column) for column in range(self.size)]
+        if not all(self._line_is_valid(line) for line in rows + columns):
             return False
+        complete_rows = [tuple(line) for line in rows if EMPTY not in line]
+        complete_columns = [tuple(line) for line in columns if EMPTY not in line]
+        return len(complete_rows) == len(set(complete_rows)) and len(complete_columns) == len(set(complete_columns))
 
-        if column > 0 and array[column - 1] == nummer:
-            if column > 1 and array[column - 2] == nummer:
-                return False
-            if column < len(array) - 1 and array[column + 1] == nummer:
-                return False
+    def _best_empty_spot(self) -> tuple[Optional[tuple[int, int]], list[int]]:
+        """Choose the empty cell with the fewest legal values (MRV heuristic)."""
+        best_position = None
+        best_candidates = [0, 1]
+        for row in range(self.size):
+            for column in range(self.size):
+                if self.board[row][column] != EMPTY:
+                    continue
+                candidates = [number for number in (0, 1) if self.is_valid(number, (row, column))]
+                if len(candidates) < len(best_candidates) or best_position is None:
+                    best_position, best_candidates = (row, column), candidates
+                if len(candidates) <= 1:
+                    return best_position, best_candidates
+        return best_position, best_candidates
 
-        if column < len(array) - 1 and array[column + 1] == nummer:
-            if column < len(array) - 2 and array[column + 2] == nummer:
-                return False
-            if column > 1 and array[column - 1] == nummer:
-                return False
+    def find_empty_spot(self) -> Optional[tuple[int, int]]:
+        position, _ = self._best_empty_spot()
+        return position
 
-        return True
-
-    def find_empty_spot(self):
-        for i in range(len(self.board)):  # aantal rijen
-            for j in range(len(self.board[0])):  # aantal kolommen
-                if self.board[i][j] == "":
-                    return i, j
-        return None
-
-    def stupid_solve(self):
-        empty_spot = self.find_empty_spot()
-        if empty_spot is None:
-            return True
-        else:
-            row, column = empty_spot
-        for i in [0, 1]:
-            if self.is_valid(i, (row, column)):
-                self.board[row][column] = i
-                if self.stupid_solve():
-                    return True
-                else:
-                    self.board[row][column] = ""
+    def stupid_solve(self) -> bool:
+        """Solve the board with constraint-guided backtracking."""
+        if not self._board_is_valid():
+            return False
+        position, candidates = self._best_empty_spot()
+        if position is None:
+            return self.correct_full_board()
+        for number in candidates:
+            self.place(number, position)
+            if self.stupid_solve():
+                return True
+        self.place(EMPTY, position)
         return False
 
-    def find_all_non_empty_spot(self):
-        non_empty_spots = []
-        for i in range(len(self.board)):
-            for j in range(len(self.board[0])):
-                if self.board[i][j] != "":
-                    non_empty_spots.append((i, j))
-        return non_empty_spots
+    def smart_solve(self) -> bool:
+        """Repeatedly fill cells that have exactly one legal value.
 
-    def up(self, position):
-        row, col = position
-        if row == 0:
+        Returns ``False`` if a contradiction is found, otherwise ``True``.
+        """
+        if not self._board_is_valid():
             return False
-        else:
-            return row - 1, col
+        while True:
+            changed = False
+            for row, column in self.find_all_empty_spots():
+                candidates = [number for number in (0, 1) if self.is_valid(number, (row, column))]
+                if not candidates:
+                    return False
+                if len(candidates) == 1:
+                    self.place(candidates[0], (row, column))
+                    changed = True
+            if not changed:
+                return True
 
-    def down(self, position):
-        row, col = position
-        if row >= len(self.board) - 1:
-            return False
-        else:
-            return row + 1, col
+    def find_all_empty_spots(self) -> list[tuple[int, int]]:
+        return [
+            (row, column)
+            for row in range(self.size)
+            for column in range(self.size)
+            if self.board[row][column] == EMPTY
+        ]
 
-    def left(self, position):
-        row, col = position
-        if col == 0:
-            return False
-        else:
-            return row, col - 1
+    def find_all_non_empty_spot(self) -> list[tuple[int, int]]:
+        return [
+            (row, column)
+            for row in range(self.size)
+            for column in range(self.size)
+            if self.board[row][column] != EMPTY
+        ]
 
-    def right(self, position):
-        row, col = position
-        if col >= len(self.board[0]) - 1:
-            return False
-        else:
-            return row, col + 1
+    def place(self, number: Union[int, str], position: tuple[int, int]) -> None:
+        row, column = position
+        self.board[row][column] = number
 
-    def nb_on_spot(self, position):
-        if position is False:
-            return 5
-        else:
-            row, col = position
-            return self.board[row][col]
-
-    def place(self, nb, pos):
-        row, col = pos
-        self.board[row][col] = nb
-
-    def dubble_number_check(self):
-        non_empty_spots = self.find_all_non_empty_spot()
-        for spot in non_empty_spots:
-            nb_spot = self.nb_on_spot(spot)
-
-            if self.up(spot):
-                pos_up = self.up(spot)
-                if self.nb_on_spot(pos_up) == nb_spot:
-                    if self.down(spot):
-                        new_pos_down = self.down(spot)
-                        if new_pos_down not in non_empty_spots:
-                            if nb_spot == 1:
-                                self.place(0, new_pos_down)
-                            else:
-                                self.place(1, new_pos_down)
-
-            if self.down(spot):
-                pos_down = self.down(spot)
-                if self.nb_on_spot(pos_down) == nb_spot:
-                    if self.up(spot):
-                        new_pos_up = self.up(spot)
-                        if new_pos_up not in non_empty_spots:
-                            if nb_spot == 1:
-                                self.place(0, new_pos_up)
-                            else:
-                                self.place(1, new_pos_up)
-
-            if self.left(spot):
-                pos_left = self.left(spot)
-                if self.nb_on_spot(pos_left) == nb_spot:
-                    if self.right(spot):
-                        new_pos_right = self.right(spot)
-                        if new_pos_right not in non_empty_spots:
-                            if nb_spot == 1:
-                                self.place(0, new_pos_right)
-                            else:
-                                self.place(1, new_pos_right)
-
-            if self.right(spot):
-                pos_right = self.right(spot)
-                if self.nb_on_spot(pos_right) == nb_spot:
-                    if self.left(spot):
-                        new_pos_left = self.left(spot)
-                        if new_pos_left not in non_empty_spots:
-                            if nb_spot == 1:
-                                self.place(0, new_pos_left)
-                            else:
-                                self.place(1, new_pos_left)
-
-    def find_all_empty_spots(self):
-        spots = []
-        for row in range(len(self.board)):  # aantal rijen
-            for col in range(len(self.board[0])):  # aantal kolommen
-                if self.board[row][col] == "":
-                    spots.append((row, col))
-        return spots
-
-    def between_check(self):
-        empty_spots = self.find_all_empty_spots()
-        for spot in empty_spots:
-            if self.nb_on_spot(self.up(spot)) == self.nb_on_spot(self.down(spot)) and isinstance(
-                    self.nb_on_spot(self.up(spot)), int):
-                if self.nb_on_spot(self.up(spot)) == 1:
-                    self.place(0, spot)
-                else:
-                    self.place(1, spot)
-            if self.nb_on_spot(self.left(spot)) == self.nb_on_spot(self.right(spot)) and isinstance(
-                    self.nb_on_spot(self.left(spot)), int):
-                if self.nb_on_spot(self.left(spot)) == 1:
-                    self.place(0, spot)
-                else:
-                    self.place(1, spot)
-
-    def smart_solve(self):
-        old_board = copy.deepcopy(self.board)
-        self.dubble_number_check()
-        self.between_check()
-        if self.board == old_board:
-            return False
-        else:
-            self.smart_solve()
-
-    def print_board(self):
-        for i in range(len(self.board)):
-            for x in self.board:
-                if x[i] == "":
-                    print(" ", end=' | ')
-                else:
-                    print(x[i], end=' | ')
-            print()
-
-    def correct_full_board(self):
+    def print_board(self) -> None:
         for row in self.board:
-            if row.count(0) != len(self.board) // 2:
-                return False
+            print(" | ".join(" " if value == EMPTY else str(value) for value in row))
 
-        for col in range(len(self.board)):
-            whole_col = []
-            for row in range(len(self.board)):
-                whole_col.append(self.board[row][col])
-
-            if whole_col.count(0) != len(self.board) // 2:
-                return False
-
-        return True
-
-#
-# board = [["", 0, "", "", 1, "", 0, ""],
-#          ["", "", "", "", "", "", "", 1],
-#          ["", "", "", "", "", "", "", ""],
-#          ["", "", "", 0, "", "", 1, ""],
-#          ["", "", 1, "", 1, "", "", 0],
-#          [1, "", "", "", 1, "", "", ""],
-#          [1, "", "", "", "", "", "", ""],
-#          ["", "", "", "", "", "", 0, ""]]
-#
-# stupid_solve_board = Binairy(board)
-# stupid_solve_board.smart_solve()
-# stupid_solve_board.stupid_solve()
-# start = time.time()
-# stupid_solve_board.print_board()
-# print("_________________________")
-# stupid_solve_board.stupid_solve()
-# stupid_solve_board.print_board()
-# end = time.time()
-# print("____________________________")
-# print("time stupid solve = ",end-start)
-# print("____________________________________")
-# board = [["", 0, "", "", 1, "", 0, ""],
-#          ["", "", "", "", "", "", "", 1],
-#          ["", "", "", "", "", "", "", ""],
-#          ["", "", "", 0, "", "", 1, ""],
-#          ["", "", 1, "", 1, "", "", 0],
-#          [1, "", "", "", 1, "", "", ""],
-#          [1, "", "", "", "", "", "", ""],
-#          ["", "", "", "", "", "", 0, ""]]
-# smart_solve_board = Binairy(board)
-# start = time.time()
-# smart_solve_board.smart_solve()
-# smart_solve_board.stupid_solve()
-# end = time.time()
-# print("time smart solve first = ", end-start)
+    def correct_full_board(self) -> bool:
+        return (
+            all(EMPTY not in row for row in self.board)
+            and self._board_is_valid()
+            and all(row.count(0) == self.half for row in self.board)
+            and all(self._column(column).count(0) == self.half for column in range(self.size))
+        )
